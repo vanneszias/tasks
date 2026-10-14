@@ -22,6 +22,8 @@ provider = json.loads(Path(".spike/provider-contract-evidence.json").read_text()
 gpui = next(Path.home().glob(".cargo/registry/src/*/gpui-0.2.2/.cargo_vcs_info.json"))
 report = {
     "recorded_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "source_commit": command("git", "rev-parse", "HEAD"),
+    "source_worktree_status": command("git", "status", "--porcelain"),
     "gate": "OPEN: native event/IME/accessibility acceptance and bounded shutdown-failure coverage incomplete",
     "tools": {"rustc": command("rustc", "--version"), "cargo": command("cargo", "--version"),
               "opencode": command("opencode", "--version"), "opencode_binary_sha256": digest(shutil.which("opencode")),
@@ -32,9 +34,10 @@ report = {
               "gpui": "0.2.2 + font-kit", "gpui_source": json.loads(gpui.read_text()),
               "portable_pty": "0.9.0"},
     "source_sha256": {str(path): digest(path) for path in
-                      [Path("Cargo.toml"), Path("Cargo.lock"), Path("build.rs"), Path("rust-toolchain.toml"),
-                       *sorted(Path("src").glob("*.rs")), *sorted(Path("native").glob("*.c")),
-                       *sorted(Path("scripts").glob("*.py"))]},
+                       [Path("Cargo.toml"), Path("Cargo.lock"), Path("build.rs"), Path("rust-toolchain.toml"),
+                        *sorted(Path("src").rglob("*.rs")), *sorted(Path("native").glob("*.c")),
+                        *sorted(Path("native").glob("*.m")), *sorted(Path("tests").rglob("*.rs")),
+                        *sorted(Path("scripts").glob("*.py"))]},
     "native_sessions": native,
     "api_sessions": json.loads(Path(".spike/session-evidence.json").read_text()),
     "vt": json.loads(Path(".spike/vt-evidence.json").read_text()),
