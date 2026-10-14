@@ -1,0 +1,120 @@
+{
+  "recorded_at": "2026-10-14T10:17:06.366631+00:00",
+  "gate": "OPEN: native event/IME/accessibility acceptance and bounded shutdown-failure coverage incomplete",
+  "tools": {
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "opencode": "opencode v2.0.10",
+    "opencode_binary_sha256": "f2dfe9ad5851219a6bd97b2e3cd2081c0964b5f120530f578d3da3aefc5ccc5a",
+    "zed": "Zed 1.23.3 \u2013 /Applications/Zed.app",
+    "macos": "26.6.2",
+    "xcode": "Xcode 27.0\nBuild version 27A266a",
+    "ghostty_revision": "291fd050b9e9c293c8adb6a140742649b7e42d3a",
+    "zig": "0.16.0",
+    "gpui": "0.2.2 + font-kit",
+    "gpui_source": {
+      "git": {
+        "sha1": "69e2130295c2649963eb639fc70b4f2ee8ea1624",
+        "dirty": true
+      },
+      "path_in_vcs": "crates/gpui"
+    },
+    "portable_pty": "0.9.0"
+  },
+  "source_sha256": {
+    "Cargo.toml": "e57f55afba8eb80d1bbf8fc894d43dc030725f53077170a6500077711bbe967a",
+    "Cargo.lock": "44d7e5cc156500cf5afb7ee8ceb7fe9e521c2a0cb8fbcf13679d77cef31c268a",
+    "build.rs": "5d647adde62f6a5120dea36d4fbc0a09d0d4d905a5101503dcff341597e514d5",
+    "rust-toolchain.toml": "b4ea3c94c934d96a2772b7878c12ccbf3e486313d0988a9c960e0bd87bafc8fe",
+    "src/lib.rs": "b554aeab325620b946e6f9c6ce5e9826f2c815cf67df03f249bc6a7e071ebf63",
+    "src/main.rs": "8d94fb5f6a5d28480ab10aad7431a0ecdc49aa0ea5cbb4e33498e25c3ecf3656",
+    "src/terminal.rs": "9c930e386f05ec732b931105b36965870c55be64eb1b178dfeabb1fae89a180d",
+    "src/text_smoke.rs": "4b7dfd2ae36d87a1994868294fa6ff9111230ffafb9f2b386a97fea660f7f791",
+    "native/check_vt.c": "5201126bfabcd8abc09b61ca2f52bcdea101ebf6378641ff4442d7a72258b141",
+    "native/ghostty_bridge.c": "4aa0d943d27fa09ba4a231503ce5530819af9a15e1a8e344368082cc5fca9c4f",
+    "scripts/bootstrap_ghostty.py": "4d3f9f326b1bdc346de5d6538965d3b718702832de90db5068d3b671be6168b8",
+    "scripts/check_native_sessions.py": "33def06d6828add75f1b8dbd613e3ffbdba41f0b9a011f3615f3b351b4d91968",
+    "scripts/check_sessions.py": "4f12753aa0fd78e7d18b33f9690f1eb65ba9ba2e9b061c41f1e102852d2361e2",
+    "scripts/check_vt.py": "f7833a080500458f9eb8246435b1c52f4ab4df9e791867095c242704a21efe48",
+    "scripts/check_zed.py": "bfb68889abd51a0f0e6411fe6219a1c7f8bb7f8cc00e472c66c1a91c27cc6f66",
+    "scripts/fixture_model.py": "64c57d04fb713f3833d152d6568d6804eae5037bda1e5f874c9f30dc16c7bade",
+    "scripts/inspect_opencode.py": "8de5bf1c3c3e75609cf649332dd93827cf1a73921ac8c16366380b6a15d3492b",
+    "scripts/inspect_provider_contracts.py": "b653a70df2fcb33b2d0ad6773502adb54289a1e396294442a5a16bcb8ae5b788",
+    "scripts/record_evidence.py": "48937d03dfb7f880cef9850eb9f55d473abe0f78743af5a59a1e2924649a0719"
+  },
+  "native_sessions": {
+    "opencode": "2.0.10",
+    "fixture": "/Users/zias/dev/tasks/.spike/native-session-tdpfjrdl",
+    "checks": {
+      "launch_sent_no_prompt": true,
+      "agent_tool_started": true,
+      "gpui_quit_returned": true,
+      "tool_process_stopped": true,
+      "unrelated_server_alive": true,
+      "unrelated_execution_still_active": true,
+      "unrelated_session_preserved": true,
+      "history_recorded": true,
+      "exact_session_location": true,
+      "history_preserved": true,
+      "no_late_tool_write": true,
+      "unrelated_execution_completed": true
+    },
+    "tool_pid": 61348,
+    "visual_capture": "captured; requires inspection",
+    "session": "ses_ec61689fdffefOdK5v1V2c1T0C"
+  },
+  "api_sessions": {
+    "version": "2.0.10",
+    "session": "ses_ec62916dcffeT8F6LA35dswUke",
+    "location": {
+      "directory": "/Users/zias/dev/tasks/.spike/session-check-pt0olt65/repo"
+    },
+    "interruption": {
+      "interrupted": true
+    },
+    "history_preserved": true,
+    "unrelated_private_server_alive": true,
+    "scope": "private serve API; standalone TUI and actual GPUI Quit still require testing"
+  },
+  "vt": {
+    "unicode_styles_selection": true,
+    "enter_tab_encoding": true,
+    "ctrl_c_kitty_paste": true,
+    "alternate_resize_scrollback": true,
+    "two_retained_vt_states": true,
+    "output_lines": 10000,
+    "parse_ms": 0.874
+  },
+  "zed_launch": {
+    "executable": "/opt/homebrew/bin/zed",
+    "version": "Zed 1.23.3 \u2013 /Applications/Zed.app",
+    "worktree": "/Users/zias/dev/tasks/.spike/zed-launch-j0gt6syn/worktree",
+    "cli_exit_code": 0,
+    "elapsed_seconds": 0.5789475000000001,
+    "separate_user_data": true,
+    "window_path_confirmation": "manual check required"
+  },
+  "provider_schemas": {
+    "jira": {
+      "source": "https://dac-static.atlassian.com/cloud/jira/platform/swagger-v3.v3.json",
+      "version": "1001.0.0-SNAPSHOT-ea70632e0e06e672b6c58852a35aaed86a7d313e",
+      "sha256": "204ee0854f0c81ef01439b6e30688c374794d09719adf9aec3d64e19d888e2cf"
+    },
+    "github": {
+      "source": "https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json",
+      "version": "1.1.4",
+      "sha256": "7e81618beb08bec8cf692dffd28615a9c87a2db335bd425ce8ab5a7d3f949b21"
+    },
+    "bitbucket": {
+      "source": "https://dac-static.atlassian.com/cloud/bitbucket/swagger.v3.json",
+      "version": "2.0",
+      "sha256": "f7d1dc58d6e22042c8cdb7d1ece18d97bf07590ef1e39e12dcd99715e9720c27"
+    }
+  },
+  "linux": {
+    "image": "rust:1.98.0-bookworm@sha256:82150a52ec202c1b14d7817e14516c392bb7f5cfebd88f1ed531cb37ebd39922",
+    "command": "cargo test --locked --lib",
+    "result": "PASS: core boundary builds; library has no lifecycle tests yet"
+  },
+  "native_input_automation": "false"
+}
