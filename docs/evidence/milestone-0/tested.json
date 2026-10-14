@@ -1,5 +1,7 @@
 {
-  "recorded_at": "2026-10-14T10:17:06.366631+00:00",
+  "recorded_at": "2026-10-14T10:36:41.826898+00:00",
+  "source_commit": "b736ae5831ed9f6ec1f5fa11966ddb00fb81c402",
+  "source_worktree_status": "",
   "gate": "OPEN: native event/IME/accessibility acceptance and bounded shutdown-failure coverage incomplete",
   "tools": {
     "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
@@ -22,29 +24,32 @@
     "portable_pty": "0.9.0"
   },
   "source_sha256": {
-    "Cargo.toml": "e57f55afba8eb80d1bbf8fc894d43dc030725f53077170a6500077711bbe967a",
-    "Cargo.lock": "44d7e5cc156500cf5afb7ee8ceb7fe9e521c2a0cb8fbcf13679d77cef31c268a",
-    "build.rs": "5d647adde62f6a5120dea36d4fbc0a09d0d4d905a5101503dcff341597e514d5",
+    "Cargo.toml": "227820548074398c24f3f0ce95f36f6f5749f710f7caf0176dd3ab0fc6656d37",
+    "Cargo.lock": "de9ec1b44d93c9c76b1e853dfe31cfd482bb72ece01efeae459325b17c4b3cf8",
+    "build.rs": "1420526d710733830ac589c87aaa65e20bfe03d47da2b48e99b5f7e51c406408",
     "rust-toolchain.toml": "b4ea3c94c934d96a2772b7878c12ccbf3e486313d0988a9c960e0bd87bafc8fe",
-    "src/lib.rs": "b554aeab325620b946e6f9c6ce5e9826f2c815cf67df03f249bc6a7e071ebf63",
+    "src/lib.rs": "65aa1bcb2ae2d72f439807d97a109e0126e89c92bdd9af292dbe3c4b2da1b190",
     "src/main.rs": "8d94fb5f6a5d28480ab10aad7431a0ecdc49aa0ea5cbb4e33498e25c3ecf3656",
-    "src/terminal.rs": "9c930e386f05ec732b931105b36965870c55be64eb1b178dfeabb1fae89a180d",
+    "src/process.rs": "0bf5cb4cf2edba486610d34d00c53608665b6ad73ba2804d23ee15b21344d824",
+    "src/terminal.rs": "38f2da31a8b76ca114421ec641c9407ba157056069cfa9fc92ecb1e90364b3a3",
     "src/text_smoke.rs": "4b7dfd2ae36d87a1994868294fa6ff9111230ffafb9f2b386a97fea660f7f791",
-    "native/check_vt.c": "5201126bfabcd8abc09b61ca2f52bcdea101ebf6378641ff4442d7a72258b141",
-    "native/ghostty_bridge.c": "4aa0d943d27fa09ba4a231503ce5530819af9a15e1a8e344368082cc5fca9c4f",
+    "native/check_vt.c": "f1e843f0cd5a3695027d911e216461f4aaadcfa5237abe01bb0ac608e1cad3c0",
+    "native/ghostty_bridge.c": "8f0fc46bdf9fc896e4b07975fb499fff9565997dae7526b6fc2b6bb44fa507f7",
+    "native/shutdown_bridge.m": "724af917a40038835b7f957cdb2eeddc7bb902529856388ebb3b676e776e7d72",
     "scripts/bootstrap_ghostty.py": "4d3f9f326b1bdc346de5d6538965d3b718702832de90db5068d3b671be6168b8",
-    "scripts/check_native_sessions.py": "33def06d6828add75f1b8dbd613e3ffbdba41f0b9a011f3615f3b351b4d91968",
+    "scripts/check_linux.py": "caca93cd6116334672e4ecc5e228d4f7d5285f4ae372453ef9dd9c7536e26627",
+    "scripts/check_native_sessions.py": "f70283e752b2007ebe67e342310d1ed4fe30c62d4f39fc5767c12f00d6b12a44",
     "scripts/check_sessions.py": "4f12753aa0fd78e7d18b33f9690f1eb65ba9ba2e9b061c41f1e102852d2361e2",
     "scripts/check_vt.py": "f7833a080500458f9eb8246435b1c52f4ab4df9e791867095c242704a21efe48",
     "scripts/check_zed.py": "bfb68889abd51a0f0e6411fe6219a1c7f8bb7f8cc00e472c66c1a91c27cc6f66",
     "scripts/fixture_model.py": "64c57d04fb713f3833d152d6568d6804eae5037bda1e5f874c9f30dc16c7bade",
     "scripts/inspect_opencode.py": "8de5bf1c3c3e75609cf649332dd93827cf1a73921ac8c16366380b6a15d3492b",
     "scripts/inspect_provider_contracts.py": "b653a70df2fcb33b2d0ad6773502adb54289a1e396294442a5a16bcb8ae5b788",
-    "scripts/record_evidence.py": "48937d03dfb7f880cef9850eb9f55d473abe0f78743af5a59a1e2924649a0719"
+    "scripts/record_evidence.py": "d399bf6357b927b64c1d2058f0a38239fbd5a110990962239bf9b4b98b6fc97f"
   },
   "native_sessions": {
     "opencode": "2.0.10",
-    "fixture": "/Users/zias/dev/tasks/.spike/native-session-tdpfjrdl",
+    "fixture": "/Users/zias/dev/tasks/.spike/native-session-g9jv8o2g",
     "checks": {
       "launch_sent_no_prompt": true,
       "agent_tool_started": true,
@@ -59,10 +64,30 @@
       "no_late_tool_write": true,
       "unrelated_execution_completed": true
     },
-    "tool_pid": 61348,
+    "tested_source_sha256": {
+      "Cargo.toml": "227820548074398c24f3f0ce95f36f6f5749f710f7caf0176dd3ab0fc6656d37",
+      "Cargo.lock": "de9ec1b44d93c9c76b1e853dfe31cfd482bb72ece01efeae459325b17c4b3cf8",
+      "build.rs": "1420526d710733830ac589c87aaa65e20bfe03d47da2b48e99b5f7e51c406408",
+      "rust-toolchain.toml": "b4ea3c94c934d96a2772b7878c12ccbf3e486313d0988a9c960e0bd87bafc8fe",
+      "src/lib.rs": "65aa1bcb2ae2d72f439807d97a109e0126e89c92bdd9af292dbe3c4b2da1b190",
+      "src/main.rs": "8d94fb5f6a5d28480ab10aad7431a0ecdc49aa0ea5cbb4e33498e25c3ecf3656",
+      "src/process.rs": "0bf5cb4cf2edba486610d34d00c53608665b6ad73ba2804d23ee15b21344d824",
+      "src/terminal.rs": "38f2da31a8b76ca114421ec641c9407ba157056069cfa9fc92ecb1e90364b3a3",
+      "src/text_smoke.rs": "4b7dfd2ae36d87a1994868294fa6ff9111230ffafb9f2b386a97fea660f7f791",
+      "native/check_vt.c": "f1e843f0cd5a3695027d911e216461f4aaadcfa5237abe01bb0ac608e1cad3c0",
+      "native/ghostty_bridge.c": "8f0fc46bdf9fc896e4b07975fb499fff9565997dae7526b6fc2b6bb44fa507f7",
+      "native/shutdown_bridge.m": "724af917a40038835b7f957cdb2eeddc7bb902529856388ebb3b676e776e7d72",
+      "scripts/check_native_sessions.py": "f70283e752b2007ebe67e342310d1ed4fe30c62d4f39fc5767c12f00d6b12a44",
+      "scripts/fixture_model.py": "64c57d04fb713f3833d152d6568d6804eae5037bda1e5f874c9f30dc16c7bade",
+      "scripts/inspect_opencode.py": "8de5bf1c3c3e75609cf649332dd93827cf1a73921ac8c16366380b6a15d3492b",
+      "scripts/check_sessions.py": "4f12753aa0fd78e7d18b33f9690f1eb65ba9ba2e9b061c41f1e102852d2361e2"
+    },
+    "terminal_binary_sha256": "eee1ef3627a805e85558c2dc48a3b44ed686ef2b3680738c04ee0df7993fd4a0",
+    "tool_pid": 72037,
     "visual_capture": "captured; requires inspection",
-    "session": "ses_ec61689fdffefOdK5v1V2c1T0C"
+    "session": "ses_ec6051845ffeApRPW7KhY971cP"
   },
+  "native_evidence_source_matches": true,
   "api_sessions": {
     "version": "2.0.10",
     "session": "ses_ec62916dcffeT8F6LA35dswUke",
@@ -77,13 +102,14 @@
     "scope": "private serve API; standalone TUI and actual GPUI Quit still require testing"
   },
   "vt": {
+    "mouse_protocols": true,
     "unicode_styles_selection": true,
     "enter_tab_encoding": true,
     "ctrl_c_kitty_paste": true,
     "alternate_resize_scrollback": true,
     "two_retained_vt_states": true,
     "output_lines": 10000,
-    "parse_ms": 0.874
+    "parse_ms": 1.05
   },
   "zed_launch": {
     "executable": "/opt/homebrew/bin/zed",

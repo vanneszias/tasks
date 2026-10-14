@@ -16,7 +16,7 @@ Status: **gate open**, tested 2026-10-14. Runnable spike and evidence are availa
 | Zed | 1.23.3, `/opt/homebrew/bin/zed` → `/Applications/Zed.app` |
 | Host | Apple Silicon, macOS 26.6.2, Xcode 27.0 (27A266a) |
 
-[Evidence manifest](evidence/milestone-0/tested.json) records source SHA-256 values, tool identities, fixture session IDs and check results. There is no repository commit yet; these hashes identify the tested working files. Ignored `.spike` fixtures contain private server logs and raw databases; they are not deliverables.
+[Evidence manifest](evidence/milestone-0/tested.json) records source SHA-256 values, repository commit/worktree identity, tool identities, fixture session IDs and check results. Native runs now build the application first and record both source and executable hashes; `native_evidence_source_matches` detects source changes since that run. Ignored `.spike` fixtures contain private server logs and raw databases; they are not deliverables. Remaining work is tracked in the [GitHub backlog](implementation-backlog.md).
 
 ## Results and limits
 
@@ -34,9 +34,11 @@ Status: **gate open**, tested 2026-10-14. Runnable spike and evidence are availa
 
 [Inspected screenshot](evidence/milestone-0/embedded-opencode.png) shows native spike controls, OpenCode conversation title, prompt field, model/agent selector and checkout status. The test supplies a fixture prompt directly to the PTY; it does not exercise a physical keystroke. Initial invisible text was caused by disabling GPUI defaults without enabling `font-kit`, which selected a placeholder text system. `gpui-text-smoke` reproduces text rendering independently of Ghostty.
 
-The bridge uses external `libghostty-vt`, not Ghostty's internal AppKit surface API. Rust owns PTY I/O, GPUI rendering/input and terminal entities; C isolates Ghostty's unstable ABI. Hidden terminals continue parsing bounded output batches but do not paint. A 10,000-line VT parsing check took 0.874 ms on this host; this is not end-to-end rendering latency, hidden-view CPU profiling, or an interaction benchmark. GPUI currently uses fixed 9×18 pixel cells and Menlo 14px; complex shaping, protocol completeness and accessibility still need acceptance.
+The bridge uses external `libghostty-vt`, not Ghostty's internal AppKit surface API. Rust owns PTY I/O, GPUI rendering/input and terminal entities; C isolates Ghostty's unstable ABI. Hidden terminals continue parsing bounded output batches but do not paint. The manifest records a 10,000-line VT parsing check and its `parse_ms`; this is not end-to-end rendering latency, hidden-view CPU profiling, or an interaction benchmark. GPUI currently uses fixed 9×18 pixel cells and Menlo 14px; complex shaping, protocol completeness and accessibility still need acceptance.
 
-Manual feedback confirmed text entry but found Enter did not submit. GPUI's macOS backend supplies `key_char` for Enter (`\n`) and Tab (`\t`); the prototype incorrectly deferred every unmodified `key_char` to committed-text handling. It now defers printable text only, allowing control keys through Ghostty encoding. A Rust routing regression check and sanitizer-backed C checks verify Enter produces `\r` and Tab produces `\t`. Native build and all 12 native session checks pass after this fix (`native-session-tdpfjrdl`, session `ses_ec61689fdffefOdK5v1V2c1T0C`); physical Enter/Tab re-acceptance is still pending. The regenerated screenshot was inspected for native OpenCode rendering.
+Manual feedback confirmed text entry but found Enter did not submit. GPUI's macOS backend supplies `key_char` for Enter (`\n`) and Tab (`\t`); the prototype incorrectly deferred every unmodified `key_char` to committed-text handling. It now defers printable text only, allowing control keys through Ghostty encoding. A Rust routing regression check and sanitizer-backed C checks verify Enter produces `\r` and Tab produces `\t`. Native build and all 12 native session checks passed after this fix (`native-session-tdpfjrdl`, session `ses_ec61689fdffefOdK5v1V2c1T0C`), before physical re-acceptance. The regenerated screenshot was inspected for native OpenCode rendering.
+
+The user subsequently confirmed the repaired Enter/input flow works. Issue #2's integrated change adds Ghostty application mouse encoding, fractional wheel input, IME replacement/selection ranges, local preedit and cursor-cell candidate anchoring. Sanitizer-backed mouse protocol checks and the actual native session fixture pass after integration (`native-session-g9jv8o2g`, session `ses_ec6051845ffeApRPW7KhY971cP`). See [terminal validation](terminal-validation.md) for implemented behavior and remaining physical IME, mouse-release, accessibility and performance acceptance.
 
 ### Session contract observed in OpenCode v2.0.10
 
@@ -77,7 +79,7 @@ python3 scripts/inspect_provider_contracts.py
 python3 scripts/record_evidence.py
 ```
 
-Run native checks sequentially: they open windows and screenshot a fixed screen rectangle. The fixture can take about a minute. Screenshot capture requires an available desktop/screen capture; inspect every new capture. `record_evidence.py` copies available results, including failures; it does not certify acceptance or automatically inspect screenshots. Cargo currently reports upstream future-incompatibility warnings for `block` and `proc-macro-error2`.
+Run native checks sequentially: they open windows and screenshot a fixed screen rectangle. The native session fixture rebuilds its binary before running and can take about a minute. Screenshot capture requires an available desktop/screen capture; inspect every new capture. `record_evidence.py` copies available results, including failures, and compares native-run source hashes; it does not certify acceptance or automatically inspect screenshots. Cargo currently reports upstream future-incompatibility warnings for `block` and `proc-macro-error2`.
 
 For an interactive shell without user repository changes:
 
@@ -100,6 +102,8 @@ docker run --rm -v "$PWD:/source:ro" \
 
 This does not validate future workflow modules, Ghostty on Linux or GPUI Wayland/X11. The external VT/PTY architecture avoids an AppKit terminal dependency; Linux UI build/input, fonts, clipboard and Secret Service remain follow-up work.
 
+[Platform support findings](platform-support.md) add a source-only archive checker (`python3 scripts/check_linux.py --pty`), ARM64/emulated AMD64 results and a dependency-backed macOS 13 baseline candidate. Older-host execution and deployment-target alignment remain required before claiming that baseline supported.
+
 ## Manual native acceptance — user-selected next step
 
 macOS returned `false` for System Events UI automation. The user chose manual checks. Record host/build hashes, steps, actual results and screenshots; an unperformed check remains open.
@@ -109,7 +113,7 @@ macOS returned `false` for System Events UI automation. The user chose manual ch
 3. Drag-select Unicode output, Cmd+C, and paste into a separate text editor. Copy text from that editor and Cmd+V into the shell. Check exact text, multiline handling and bracketed paste in OpenCode. Test selection at viewport edges.
 4. Run `seq 1 10000`; scroll backward/forward. Resize narrow/wide and run `stty size`; verify PTY dimensions and redraw, cursor and alternate-screen behavior. Record responsiveness during output.
 5. In Terminal 1, start `for i in 1 2 3 4 5; do echo first-$i; sleep 1; done`. Switch to Terminal 2 and run `echo second`; return to Terminal 1. Check output/state retained and input stays in the selected terminal. Check focus after clicking tabs and window deactivation/reactivation.
-6. Inspect OpenCode's keyboard navigation, clipboard, resize and mouse interactions using a disposable provider/session. Current mouse handlers select/scroll locally; forwarding application mouse protocols is not implemented. Record unsupported behavior explicitly.
+6. Inspect OpenCode's keyboard navigation, clipboard, resize and mouse interactions using a disposable provider/session. Application-requested mouse events now use Ghostty encoding; Shift-drag/Shift-scroll provide local selection/scrollback overrides. Follow the additional protocol/composition checks in [terminal validation](terminal-validation.md) and record unsupported behavior explicitly.
 7. Check visible focus and labeled controls with macOS Accessibility Inspector/VoiceOver. Terminal cells are custom canvas paint; screen-reader text/navigation is not implemented or accepted.
 8. Run the native session fixture. Inspect its screenshot, strict history check and unrelated-agent result. Check Cmd+Q and **Quit spike** manually as well as the fixture timer's actual `cx.quit()` path. A passing ordinary tool test does not resolve stubborn-child/failure handling.
 9. Run `check_zed.py`; confirm Zed shows the exact evidence `worktree` path. Leave unrelated editor windows intact.
