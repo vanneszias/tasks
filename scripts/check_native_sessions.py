@@ -1,5 +1,6 @@
 """Run the actual GPUI Quit path with standalone OpenCode and a local model."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -21,12 +22,21 @@ def alive(pid):
 
 
 def main():
+    # Build the source snapshot that this run identifies; never test a stale binary silently.
+    subprocess.run(["cargo", "build", "--locked", "--features", "native", "--bin", "terminal-spike"], check=True)
+    binary = Path("target/debug/terminal-spike").resolve()
+    sources = [Path("Cargo.toml"), Path("Cargo.lock"), Path("build.rs"), Path("rust-toolchain.toml"),
+               *sorted(Path("src").rglob("*.rs")), *sorted(Path("native").glob("*.c")),
+               *sorted(Path("native").glob("*.m")), Path("scripts/check_native_sessions.py"),
+               Path("scripts/fixture_model.py"), Path("scripts/inspect_opencode.py"), Path("scripts/check_sessions.py")]
     root = Path(tempfile.mkdtemp(prefix="native-session-", dir=Path(".spike").resolve()))
     env = isolated_env(root)
     subprocess.run(["git", "init", "-q", str(root / "repo")], check=True, env=env)
     model = start_model(root, env)
     processes = []
-    evidence = {"opencode": "2.0.10", "fixture": str(root), "checks": {}}
+    evidence = {"opencode": "2.0.10", "fixture": str(root), "checks": {},
+                "tested_source_sha256": {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in sources},
+                "terminal_binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest()}
     try:
         server, url, _, headers = start_server(root, env)
         processes.append(server)
@@ -45,7 +55,7 @@ def main():
         log = open(root / "native.log", "wb")
         launch_env = {**env, "TASKS_SPIKE_QUIT_AFTER": "10",
                       "TASKS_SPIKE_TEST_INPUT": "Run the disposable shutdown fixture\r"}
-        app = subprocess.Popen([str(Path("target/debug/terminal-spike").resolve()), str(root / "repo"),
+        app = subprocess.Popen([str(binary), str(root / "repo"),
                                 shutil.which("opencode"), "--standalone", "--session", session["id"]],
                                env=launch_env, stdout=log, stderr=log)
         processes.append(app)
@@ -82,7 +92,7 @@ def main():
         evidence["checks"]["history_recorded"] = any(item["type"] == "user" for item in messages["data"])
         # Resume the same ID, with no prompt and no fixture input on this launch.
         with open(root / "resume.log", "wb") as log:
-            resumed = subprocess.Popen([str(Path("target/debug/terminal-spike").resolve()), str(root / "repo"),
+            resumed = subprocess.Popen([str(binary), str(root / "repo"),
                                         shutil.which("opencode"), "--standalone", "--session", session["id"]],
                                        env={**env, "TASKS_SPIKE_QUIT_AFTER": "5"}, stdout=log, stderr=log)
             processes.append(resumed)

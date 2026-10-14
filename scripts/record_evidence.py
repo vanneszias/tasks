@@ -39,6 +39,10 @@ report = {
                         *sorted(Path("native").glob("*.m")), *sorted(Path("tests").rglob("*.rs")),
                         *sorted(Path("scripts").glob("*.py"))]},
     "native_sessions": native,
+    "native_evidence_source_matches": all(
+        Path(path).exists() and digest(path) == expected
+        for path, expected in native["tested_source_sha256"].items()
+    ) if "tested_source_sha256" in native else None,
     "api_sessions": json.loads(Path(".spike/session-evidence.json").read_text()),
     "vt": json.loads(Path(".spike/vt-evidence.json").read_text()),
     "zed_launch": json.loads(Path(".spike/zed-evidence.json").read_text()),
