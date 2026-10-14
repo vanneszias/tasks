@@ -16,8 +16,11 @@ static NSApplicationTerminateReply should_terminate(id self, SEL selector, NSApp
 bool tasks_install_quit_guard(void) {
     id delegate = NSApp.delegate;
     if (!delegate) return false;
-    return class_addMethod(object_getClass(delegate), @selector(applicationShouldTerminate:),
-                           (IMP)should_terminate, "Q@:@");
+    // Replace as well as add: a delegate implementation must not silently bypass
+    // coordinated shutdown. GPUI owns applicationWillTerminate:, left intact.
+    class_replaceMethod(object_getClass(delegate), @selector(applicationShouldTerminate:),
+                        (IMP)should_terminate, "Q@:@");
+    return true;
 }
 bool tasks_quit_requested(void) { return atomic_exchange(&requested, false); }
 void tasks_allow_quit(void) { atomic_store(&allowed, true); }

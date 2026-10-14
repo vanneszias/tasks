@@ -7,6 +7,7 @@ use std::{
     sync::mpsc,
     time::Duration,
 };
+use tasks_foundation::process::OwnedProcess;
 
 type Emit =
     unsafe extern "C" fn(*mut c_void, u16, u16, *const u32, u32, u32, u32, bool, bool, bool);
@@ -126,9 +127,13 @@ unsafe extern "C" fn copy_bytes(data: *mut c_void, bytes: *const u8, len: usize)
 struct Output {
     writer: Box<dyn Write + Send>,
     error: Option<String>,
+    enabled: bool,
 }
 unsafe extern "C" fn write_pty(data: *mut c_void, bytes: *const u8, len: usize) {
     let output = unsafe { &mut *(data as *mut Output) };
+    if !output.enabled {
+        return;
+    }
     let bytes = unsafe { std::slice::from_raw_parts(bytes, len) };
     if let Err(error) = output
         .writer
@@ -143,7 +148,8 @@ pub struct Terminal {
     vt: *mut c_void,
     output: Box<Output>,
     master: Box<dyn MasterPty + Send>,
-    child: Option<Box<dyn portable_pty::Child + Send + Sync>>,
+    child: Option<OwnedProcess>,
+    pub agent: bool,
     incoming: mpsc::Receiver<Vec<u8>>,
     focus: FocusHandle,
     dimensions: (u16, u16),
@@ -164,6 +170,13 @@ impl Terminal {
         fixture_input: bool,
         cx: &mut Context<Self>,
     ) -> Self {
+        let agent = std::path::Path::new(&command[0])
+            .file_name()
+            .is_some_and(|name| name == "opencode");
+        assert!(
+            !agent || command.iter().any(|arg| arg == "--standalone"),
+            "The shutdown spike requires owned OpenCode --standalone; shared-service shutdown is unsupported"
+        );
         let pair = native_pty_system()
             .openpty(PtySize {
                 rows: 24,
@@ -180,6 +193,7 @@ impl Terminal {
             .slave
             .spawn_command(builder)
             .expect("launch fixture command");
+        let child = OwnedProcess::new(child).expect("capture live PTY ownership");
         drop(pair.slave);
         let mut reader = pair.master.try_clone_reader().expect("PTY reader");
         let (send, incoming) = mpsc::sync_channel(32);
@@ -199,6 +213,7 @@ impl Terminal {
         let mut output = Box::new(Output {
             writer: pair.master.take_writer().expect("PTY writer"),
             error: None,
+            enabled: true,
         });
         let vt = unsafe { tasks_vt_new(80, 24, write_pty, (&mut *output as *mut Output).cast()) };
         assert!(!vt.is_null(), "create Ghostty VT");
@@ -214,7 +229,7 @@ impl Terminal {
                     .await;
                 if this
                     .update(cx, |terminal, cx| {
-                        if started.elapsed() > Duration::from_secs(3) {
+                        if terminal.output.enabled && started.elapsed() > Duration::from_secs(3) {
                             if let Some(input) = input.take() {
                                 let _ = terminal.output.writer.write_all(input.as_bytes());
                                 let _ = terminal.output.writer.flush();
@@ -242,24 +257,12 @@ impl Terminal {
                 }
             }
         });
-        cx.on_app_quit(|this, cx| {
-            let child = this.child.take();
-            cx.background_executor().spawn(async move {
-                if let Some(mut child) = child {
-                    let pid = child.process_id();
-                    match child.kill().and_then(|_| child.wait()) {
-                        Ok(status) => eprintln!("owned PTY child {pid:?} exited: {status:?}"),
-                        Err(error) => eprintln!("owned PTY shutdown failed: {error}"),
-                    }
-                }
-            })
-        })
-        .detach();
         Self {
             vt,
             output,
             master: pair.master,
             child: Some(child),
+            agent,
             incoming,
             focus: cx.focus_handle(),
             dimensions: (80, 24),
@@ -272,6 +275,18 @@ impl Terminal {
             wheel: point(0., 0.),
             _tick: tick,
         }
+    }
+
+    pub fn begin_shutdown(&mut self) -> Option<OwnedProcess> {
+        self.output.enabled = false;
+        self.marked.clear();
+        self.child.take()
+    }
+
+    pub fn restore_after_shutdown(&mut self, child: Option<OwnedProcess>) {
+        self.child = child;
+        // Keep terminals read-only after a failed Quit. Execution may already have
+        // stopped in another tab; sending new work would invalidate the stop result.
     }
 
     fn resize(&mut self, bounds: Bounds<Pixels>) {
@@ -296,6 +311,9 @@ impl Terminal {
     }
 
     fn key(&mut self, event: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if !self.output.enabled {
+            return;
+        }
         let key = &event.keystroke;
         if key.modifiers.platform && key.key == "q" {
             return;
@@ -414,6 +432,9 @@ impl EntityInputHandler for Terminal {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.output.enabled {
+            return;
+        }
         self.marked.clear();
         self.marked_selection = 0..0;
         let result = unsafe {
@@ -438,6 +459,9 @@ impl EntityInputHandler for Terminal {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.output.enabled {
+            return;
+        }
         let mut units: Vec<u16> = self.marked.encode_utf16().collect();
         let range = range.unwrap_or(0..units.len());
         let start = range.start.min(units.len());
@@ -682,10 +706,9 @@ impl Render for Terminal {
 
 impl Drop for Terminal {
     fn drop(&mut self) {
-        // PTY closure is not proof of OpenCode interruption. Milestone-0 reports that separately.
+        // Unexpected teardown is best effort; normal Quit finishes before GPUI teardown.
         if let Some(mut child) = self.child.take() {
-            let _ = child.kill();
-            let _ = child.wait();
+            child.emergency_stop();
         }
         unsafe {
             tasks_vt_free(self.vt);
