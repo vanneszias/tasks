@@ -18,6 +18,8 @@ int tasks_vt_key(Host *, const char *, const char *, size_t, unsigned);
 int tasks_vt_paste(Host *, const uint8_t *, size_t);
 int tasks_vt_select(Host *, uint16_t, uint16_t, uint16_t, uint16_t);
 int tasks_vt_copy(Host *, WriteFn, void *);
+bool tasks_vt_mouse_tracking(Host *);
+int tasks_vt_mouse(Host *, unsigned, unsigned, float, float, unsigned, uint16_t, uint16_t);
 
 typedef struct { uint8_t bytes[8192]; size_t len; bool wide, combining, green, selected; unsigned cells; } Capture;
 static void output(void *userdata, const uint8_t *bytes, size_t len) {
@@ -40,11 +42,60 @@ static void cell(void *userdata, uint16_t x, uint16_t y, const uint32_t *points,
 }
 static void feed(Host *host, const char *text) { tasks_vt_write(host, (const uint8_t *)text, strlen(text)); }
 
+static void mouse_protocols(Host *host, Capture *capture) {
+    capture->len = 0;
+    assert(!tasks_vt_mouse_tracking(host));
+    assert(tasks_vt_mouse(host, 0, 1, 9, 18, 0, 80, 24) == 0 && capture->len == 0);
+    feed(host, "\033[?1000h\033[?1006h");
+    assert(tasks_vt_mouse_tracking(host));
+    assert(tasks_vt_mouse(host, 0, 1, 9, 18, 2, 80, 24) == 0);
+    assert(capture->len == strlen("\033[<16;2;2M") && !memcmp(capture->bytes, "\033[<16;2;2M", capture->len));
+    capture->len = 0;
+    assert(tasks_vt_mouse(host, 1, 1, 9, 18, 0, 80, 24) == 0);
+    assert(capture->len == strlen("\033[<0;2;2m") && !memcmp(capture->bytes, "\033[<0;2;2m", capture->len));
+    capture->len = 0;
+    assert(tasks_vt_mouse(host, 2, 0, 18, 36, 0, 80, 24) == 0 && capture->len == 0);
+    feed(host, "\033[?1002h");
+    assert(tasks_vt_mouse(host, 2, 1, 18, 36, 0, 80, 24) == 0);
+    assert(capture->len == strlen("\033[<32;3;3M") && !memcmp(capture->bytes, "\033[<32;3;3M", capture->len));
+    capture->len = 0;
+    assert(tasks_vt_mouse(host, 0, 4, 9, 18, 0, 80, 24) == 0);
+    assert(capture->len == strlen("\033[<64;2;2M") && !memcmp(capture->bytes, "\033[<64;2;2M", capture->len));
+    capture->len = 0;
+    feed(host, "\033[?1006l\033[?1002l\033[?9h");
+    assert(tasks_vt_mouse(host, 0, 1, 9, 18, 0, 80, 24) == 0);
+    const char x10[] = {27, '[', 'M', 32, 34, 34};
+    assert(capture->len == sizeof(x10) && !memcmp(capture->bytes, x10, sizeof(x10)));
+    capture->len = 0;
+    assert(tasks_vt_mouse(host, 1, 1, 9, 18, 0, 80, 24) == 0 && capture->len == 0);
+    feed(host, "\033[?9l\033[?1003h\033[?1006h");
+    assert(tasks_vt_mouse(host, 2, 0, 27, 54, 0, 80, 24) == 0);
+    assert(capture->len == strlen("\033[<35;4;4M") && !memcmp(capture->bytes, "\033[<35;4;4M", capture->len));
+    capture->len = 0;
+    assert(tasks_vt_mouse(host, 2, 0, 28, 55, 0, 80, 24) == 0 && capture->len == 0);
+    feed(host, "\033[?1006l\033[?1015h");
+    assert(tasks_vt_mouse(host, 0, 2, 9, 18, 0, 80, 24) == 0);
+    assert(capture->len == strlen("\033[34;2;2M") && !memcmp(capture->bytes, "\033[34;2;2M", capture->len));
+    capture->len = 0;
+    feed(host, "\033[?1015l\033[?1005h");
+    assert(tasks_vt_mouse(host, 0, 1, 9, 18, 0, 80, 24) == 0);
+    assert(capture->len == sizeof(x10) && !memcmp(capture->bytes, x10, sizeof(x10)));
+    capture->len = 0;
+    feed(host, "\033[?1005l\033[?1006h\033[?1016h");
+    assert(tasks_vt_mouse(host, 0, 1, 9, 18, 0, 80, 24) == 0);
+    // Pinned Ghostty emits surface pixels directly for mode 1016.
+    assert(capture->len == strlen("\033[<0;9;18M") && !memcmp(capture->bytes, "\033[<0;9;18M", capture->len));
+    capture->len = 0;
+    feed(host, "\033[?1016l\033[?1006l\033[?1003l\033[?1000l");
+    assert(!tasks_vt_mouse_tracking(host));
+}
+
 int main(void) {
     Capture capture = {0}, second = {0};
     Host *a = tasks_vt_new(80, 24, output, &capture);
     Host *b = tasks_vt_new(80, 24, output, &second);
     assert(a && b);
+    mouse_protocols(a, &capture);
     feed(a, "Hello \033[38;2;0;255;0m界e\xcc\x81\033[0m");
     feed(b, "retained second terminal");
     assert(tasks_vt_frame(a, cell, &capture) == 0);
@@ -88,7 +139,7 @@ int main(void) {
     assert(tasks_vt_copy(b, output, &second) == 0);
     assert(second.len == 8 && !memcmp(second.bytes, "retained", 8));
     double ms = (end.tv_sec - start.tv_sec) * 1000. + (end.tv_nsec - start.tv_nsec) / 1000000.;
-    printf("{\"unicode_styles_selection\":true,\"enter_tab_encoding\":true,\"ctrl_c_kitty_paste\":true,\"alternate_resize_scrollback\":true,\"two_retained_vt_states\":true,\"output_lines\":10000,\"parse_ms\":%.3f}\n", ms);
+    printf("{\"mouse_protocols\":true,\"unicode_styles_selection\":true,\"enter_tab_encoding\":true,\"ctrl_c_kitty_paste\":true,\"alternate_resize_scrollback\":true,\"two_retained_vt_states\":true,\"output_lines\":10000,\"parse_ms\":%.3f}\n", ms);
     tasks_vt_free(a);
     tasks_vt_free(b);
     return 0;

@@ -20,7 +20,34 @@ fn uses_native_text_input(key: &Keystroke) -> bool {
         && !key.modifiers.platform
         && !key.modifiers.alt
 }
+
+fn modifiers(mods: Modifiers) -> u32 {
+    u32::from(mods.shift)
+        | (u32::from(mods.control) << 1)
+        | (u32::from(mods.alt) << 2)
+        | (u32::from(mods.platform) << 3)
+}
+
+fn mouse_button(button: Option<MouseButton>) -> u32 {
+    match button {
+        Some(MouseButton::Left) => 1,
+        Some(MouseButton::Right) => 2,
+        Some(MouseButton::Middle) => 3,
+        _ => 0,
+    }
+}
 unsafe extern "C" {
+    fn tasks_vt_mouse_tracking(host: *mut c_void) -> bool;
+    fn tasks_vt_mouse(
+        host: *mut c_void,
+        action: u32,
+        button: u32,
+        x: f32,
+        y: f32,
+        mods: u32,
+        cols: u16,
+        rows: u16,
+    ) -> i32;
     fn tasks_vt_new(
         cols: u16,
         rows: u16,
@@ -124,6 +151,9 @@ pub struct Terminal {
     bounds: Option<Bounds<Pixels>>,
     selection_start: Option<(u16, u16)>,
     marked: String,
+    marked_selection: Range<usize>,
+    cursor: Option<(u16, u16)>,
+    wheel: Point<f32>,
     _tick: Task<()>,
 }
 
@@ -237,6 +267,9 @@ impl Terminal {
             bounds: None,
             selection_start: None,
             marked: String::new(),
+            marked_selection: 0..0,
+            cursor: None,
+            wheel: point(0., 0.),
             _tick: tick,
         }
     }
@@ -292,10 +325,7 @@ impl Terminal {
         } else {
             let name = CString::new(key.key.as_str()).unwrap();
             let text = key.key_char.as_deref().unwrap_or("");
-            let mods = u32::from(key.modifiers.shift)
-                | (u32::from(key.modifiers.control) << 1)
-                | (u32::from(key.modifiers.alt) << 2)
-                | (u32::from(key.modifiers.platform) << 3);
+            let mods = modifiers(key.modifiers);
             let result = unsafe {
                 tasks_vt_key(
                     self.vt,
@@ -320,6 +350,28 @@ impl Terminal {
             ((f32::from(position.y - origin.y) / 18.).max(0.) as u16).min(self.dimensions.1 - 1);
         (x, y)
     }
+
+    fn mouse(&mut self, action: u32, button: u32, position: Point<Pixels>, mods: Modifiers) {
+        if !unsafe { tasks_vt_mouse_tracking(self.vt) } {
+            return;
+        }
+        let origin = self.bounds.map(|b| b.origin).unwrap_or_default();
+        let result = unsafe {
+            tasks_vt_mouse(
+                self.vt,
+                action,
+                button,
+                f32::from(position.x - origin.x),
+                f32::from(position.y - origin.y),
+                modifiers(mods),
+                self.dimensions.0,
+                self.dimensions.1,
+            )
+        };
+        if result != 0 {
+            self.error = Some(format!("Ghostty mouse encoding failed: {result}"));
+        }
+    }
 }
 
 impl EntityInputHandler for Terminal {
@@ -331,7 +383,8 @@ impl EntityInputHandler for Terminal {
         _: &mut Context<Self>,
     ) -> Option<String> {
         let units: Vec<u16> = self.marked.encode_utf16().collect();
-        let range = range.start.min(units.len())..range.end.min(units.len());
+        let start = range.start.min(units.len());
+        let range = start..range.end.max(start).min(units.len());
         *actual = Some(range.clone());
         Some(String::from_utf16_lossy(&units[range]))
     }
@@ -341,9 +394,8 @@ impl EntityInputHandler for Terminal {
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<UTF16Selection> {
-        let end = self.marked.encode_utf16().count();
         Some(UTF16Selection {
-            range: end..end,
+            range: self.marked_selection.clone(),
             reversed: false,
         })
     }
@@ -352,6 +404,7 @@ impl EntityInputHandler for Terminal {
     }
     fn unmark_text(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.marked.clear();
+        self.marked_selection = 0..0;
         cx.notify();
     }
     fn replace_text_in_range(
@@ -362,6 +415,7 @@ impl EntityInputHandler for Terminal {
         cx: &mut Context<Self>,
     ) {
         self.marked.clear();
+        self.marked_selection = 0..0;
         let result = unsafe {
             tasks_vt_key(
                 self.vt,
@@ -378,13 +432,26 @@ impl EntityInputHandler for Terminal {
     }
     fn replace_and_mark_text_in_range(
         &mut self,
-        _: Option<Range<usize>>,
+        range: Option<Range<usize>>,
         text: &str,
-        _: Option<Range<usize>>,
+        selected: Option<Range<usize>>,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.marked = text.into();
+        let mut units: Vec<u16> = self.marked.encode_utf16().collect();
+        let range = range.unwrap_or(0..units.len());
+        let start = range.start.min(units.len());
+        let end = range.end.max(start).min(units.len());
+        units.splice(start..end, text.encode_utf16());
+        self.marked = String::from_utf16_lossy(&units);
+        let len = self.marked.encode_utf16().count();
+        let selected = selected.unwrap_or(text.encode_utf16().count()..text.encode_utf16().count());
+        let selection_start = start.saturating_add(selected.start).min(len);
+        self.marked_selection = selection_start
+            ..start
+                .saturating_add(selected.end)
+                .max(selection_start)
+                .min(len);
         cx.notify();
     }
     fn bounds_for_range(
@@ -394,7 +461,12 @@ impl EntityInputHandler for Terminal {
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
-        self.bounds
+        let bounds = self.bounds?;
+        let (x, y) = self.cursor?;
+        Some(Bounds::new(
+            bounds.origin + point(px(f32::from(x) * 9.), px(f32::from(y) * 18.)),
+            size(px(9.), px(18.)),
+        ))
     }
     fn character_index_for_point(
         &mut self,
@@ -421,33 +493,92 @@ impl Render for Terminal {
             .size_full()
             .track_focus(&self.focus)
             .overflow_hidden()
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, event: &MouseDownEvent, window, cx| {
-                    this.focus.focus(window);
-                    this.selection_start = Some(this.coordinate(event.position));
-                    cx.notify();
-                }),
-            )
+            .map(|mut element| {
+                for button in [MouseButton::Left, MouseButton::Middle, MouseButton::Right] {
+                    element = element
+                        .on_mouse_down(
+                            button,
+                            cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                                this.focus.focus(window);
+                                if !event.modifiers.shift
+                                    && unsafe { tasks_vt_mouse_tracking(this.vt) }
+                                {
+                                    this.mouse(
+                                        0,
+                                        mouse_button(Some(event.button)),
+                                        event.position,
+                                        event.modifiers,
+                                    );
+                                } else if event.button == MouseButton::Left {
+                                    this.selection_start = Some(this.coordinate(event.position));
+                                }
+                                cx.stop_propagation();
+                                cx.notify();
+                            }),
+                        )
+                        .on_mouse_up(
+                            button,
+                            cx.listener(|this, event: &MouseUpEvent, _, cx| {
+                                if this.selection_start.take().is_none() {
+                                    this.mouse(
+                                        1,
+                                        mouse_button(Some(event.button)),
+                                        event.position,
+                                        event.modifiers,
+                                    );
+                                }
+                                cx.stop_propagation();
+                                cx.notify();
+                            }),
+                        );
+                }
+                element
+            })
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
+                if !event.dragging() {
+                    this.selection_start = None;
+                }
                 if let Some((x1, y1)) = this.selection_start {
                     let (x2, y2) = this.coordinate(event.position);
                     unsafe {
                         tasks_vt_select(this.vt, x1, y1, x2, y2);
                     }
                     cx.notify();
+                } else if !event.modifiers.shift {
+                    this.mouse(
+                        2,
+                        mouse_button(event.pressed_button),
+                        event.position,
+                        event.modifiers,
+                    );
                 }
             }))
-            .on_mouse_up(
-                MouseButton::Left,
-                cx.listener(|this, _, _, _| this.selection_start = None),
-            )
             .on_key_down(cx.listener(Self::key))
             .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
                 let delta = event.delta.pixel_delta(px(18.));
-                unsafe {
-                    tasks_vt_scroll(this.vt, -(f32::from(delta.y) / 18.).round() as i64);
+                this.wheel.x += f32::from(delta.x) / 18.;
+                this.wheel.y += f32::from(delta.y) / 18.;
+                let x = this.wheel.x.trunc() as i32;
+                let y = this.wheel.y.trunc() as i32;
+                this.wheel.x -= x as f32;
+                this.wheel.y -= y as f32;
+                if !event.modifiers.shift && unsafe { tasks_vt_mouse_tracking(this.vt) } {
+                    for (steps, positive, negative) in [(y, 4, 5), (x, 6, 7)] {
+                        for _ in 0..steps.unsigned_abs().min(100) {
+                            this.mouse(
+                                0,
+                                if steps > 0 { positive } else { negative },
+                                event.position,
+                                event.modifiers,
+                            );
+                        }
+                    }
+                } else {
+                    unsafe {
+                        tasks_vt_scroll(this.vt, -i64::from(y));
+                    }
                 }
+                cx.stop_propagation();
                 cx.notify();
             }))
             .child(
@@ -467,11 +598,16 @@ impl Render for Terminal {
                                 this.error =
                                     Some(format!("Ghostty render snapshot failed: {result}"));
                             }
+                            this.cursor = cells
+                                .iter()
+                                .find(|cell| cell.cursor)
+                                .map(|cell| (cell.x, cell.y));
                             cells
                         })
                     },
                     move |bounds, cells, window, cx| {
                         let focus = paint_entity.read(cx).focus.clone();
+                        let focused = focus.is_focused(window) && window.is_window_active();
                         window.handle_input(
                             &focus,
                             ElementInputHandler::new(bounds, paint_entity.clone()),
@@ -487,7 +623,7 @@ impl Render for Terminal {
                             if cell.cursor {
                                 window.paint_quad(fill(
                                     Bounds::new(origin, size(px(2.), px(18.))),
-                                    rgb(0xffffff),
+                                    rgb(if focused { 0xffffff } else { 0x707070 }),
                                 ));
                             }
                         }
@@ -513,6 +649,28 @@ impl Render for Terminal {
                                 if let Err(error) = line.paint(origin, px(18.), window, cx) {
                                     eprintln!("GPUI text paint failed: {error}");
                                 }
+                            }
+                        }
+                        // Preedit stays local until the native handler commits it.
+                        let terminal = paint_entity.read(cx);
+                        if let Some((x, y)) = terminal
+                            .cursor
+                            .filter(|_| focused && !terminal.marked.is_empty())
+                        {
+                            let text: SharedString = terminal.marked.clone().into();
+                            let origin = bounds.origin
+                                + point(px(f32::from(x) * 9.), px(f32::from(y) * 18.));
+                            let run = TextRun {
+                                len: text.len(),
+                                font: font("Menlo"),
+                                color: rgb(0xffffff).into(),
+                                background_color: Some(rgb(0x375574).into()),
+                                underline: None,
+                                strikethrough: None,
+                            };
+                            let line = window.text_system().shape_line(text, px(14.), &[run], None);
+                            if let Err(error) = line.paint(origin, px(18.), window, cx) {
+                                eprintln!("GPUI preedit paint failed: {error}");
                             }
                         }
                     },

@@ -11,6 +11,8 @@ typedef struct {
     GhosttyRenderState render;
     GhosttyRenderStateRowIterator rows;
     GhosttyRenderStateRowCells cells;
+    GhosttyMouseEncoder mouse;
+    uint16_t mouse_cols, mouse_rows;
     WriteFn write;
     void *userdata;
 } Host;
@@ -26,6 +28,7 @@ void tasks_vt_free(Host *host) {
     ghostty_render_state_row_cells_free(host->cells);
     ghostty_render_state_row_iterator_free(host->rows);
     ghostty_render_state_free(host->render);
+    ghostty_mouse_encoder_free(host->mouse);
     ghostty_terminal_free(host->terminal);
     free(host);
 }
@@ -36,12 +39,15 @@ Host *tasks_vt_new(uint16_t cols, uint16_t rows, WriteFn write, void *userdata) 
     if (ghostty_terminal_new(NULL, &host->terminal, cols, rows) != GHOSTTY_SUCCESS ||
         ghostty_render_state_new(NULL, &host->render) != GHOSTTY_SUCCESS ||
         ghostty_render_state_row_iterator_new(NULL, &host->rows) != GHOSTTY_SUCCESS ||
-        ghostty_render_state_row_cells_new(NULL, &host->cells) != GHOSTTY_SUCCESS) {
+        ghostty_render_state_row_cells_new(NULL, &host->cells) != GHOSTTY_SUCCESS ||
+        ghostty_mouse_encoder_new(NULL, &host->mouse) != GHOSTTY_SUCCESS) {
         tasks_vt_free(host);
         return NULL;
     }
     host->write = write;
     host->userdata = userdata;
+    bool track_cell = true;
+    ghostty_mouse_encoder_setopt(host->mouse, GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL, &track_cell);
     ghostty_terminal_set(host->terminal, GHOSTTY_TERMINAL_OPT_USERDATA, host);
     ghostty_terminal_set(host->terminal, GHOSTTY_TERMINAL_OPT_WRITE_PTY, (const void *)write_pty);
     return host;
@@ -49,10 +55,54 @@ Host *tasks_vt_new(uint16_t cols, uint16_t rows, WriteFn write, void *userdata) 
 
 void tasks_vt_write(Host *host, const uint8_t *bytes, size_t len) {
     ghostty_terminal_vt_write(host->terminal, bytes, len);
+    ghostty_mouse_encoder_setopt_from_terminal(host->mouse, host->terminal);
 }
 
 int tasks_vt_resize(Host *host, uint16_t cols, uint16_t rows) {
     return ghostty_terminal_resize(host->terminal, cols, rows, 9, 18);
+}
+
+// Return whether the application owns mouse input, even when its tracking mode
+// intentionally suppresses this particular event (e.g. X10 releases).
+bool tasks_vt_mouse_tracking(Host *host) {
+    bool tracking = false;
+    ghostty_terminal_get(host->terminal, GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING, &tracking);
+    return tracking;
+}
+
+int tasks_vt_mouse(Host *host, unsigned action, unsigned button, float x, float y,
+                   unsigned mods, uint16_t cols, uint16_t rows) {
+    GhosttyMouseEvent event = NULL;
+    int result = ghostty_mouse_event_new(NULL, &event);
+    if (result) return result;
+    GhosttyMouseEncoderSize size = GHOSTTY_INIT_SIZED(GhosttyMouseEncoderSize);
+    size.screen_width = cols * 9;
+    size.screen_height = rows * 18;
+    size.cell_width = 9;
+    size.cell_height = 18;
+    if (host->mouse_cols != cols || host->mouse_rows != rows) {
+        ghostty_mouse_encoder_setopt(host->mouse, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size);
+        host->mouse_cols = cols;
+        host->mouse_rows = rows;
+    }
+    bool pressed = button != 0;
+    ghostty_mouse_encoder_setopt(host->mouse, GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED, &pressed);
+    ghostty_mouse_event_set_action(event, (GhosttyMouseAction)action);
+    if (button) ghostty_mouse_event_set_button(event, (GhosttyMouseButton)button);
+    else ghostty_mouse_event_clear_button(event);
+    GhosttyMods flags = 0;
+    if (mods & 1) flags |= GHOSTTY_MODS_SHIFT;
+    if (mods & 2) flags |= GHOSTTY_MODS_CTRL;
+    if (mods & 4) flags |= GHOSTTY_MODS_ALT;
+    if (mods & 8) flags |= GHOSTTY_MODS_SUPER;
+    ghostty_mouse_event_set_mods(event, flags);
+    ghostty_mouse_event_set_position(event, (GhosttyMousePosition){x, y});
+    char buffer[128];
+    size_t written = 0;
+    result = ghostty_mouse_encoder_encode(host->mouse, event, buffer, sizeof(buffer), &written);
+    if (!result && written) host->write(host->userdata, (uint8_t *)buffer, written);
+    ghostty_mouse_event_free(event);
+    return result;
 }
 
 void tasks_vt_scroll(Host *host, int64_t delta) {
