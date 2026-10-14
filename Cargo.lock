@@ -4648,6 +4648,7 @@ version = "0.0.0"
 dependencies = [
  "cc",
  "gpui",
+ "libc",
  "portable-pty",
 ]
 

@@ -18,7 +18,9 @@ fn main() {
         .warnings(true)
         .compile("tasks_ghostty_bridge");
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
-        cc::Build::new().file("native/shutdown_bridge.m").compile("tasks_shutdown_bridge");
+        cc::Build::new()
+            .file("native/shutdown_bridge.m")
+            .compile("tasks_shutdown_bridge");
         println!("cargo:rustc-link-lib=framework=Cocoa");
     }
     println!(
